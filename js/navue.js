@@ -47,8 +47,8 @@ export default {
         op.time = new Date().getTime();
         op.status = "Pending your approval";
         op.delay = 5000;
-        op.title = op.id ? op.id : op.cj.memo;
-        op.api = this.lapi;
+        op.title = op.id ? op.id : op.cj ? op.cj.memo : "No Waiter";
+        if(!op.api)op.api = this.lapi;
         this.ops.push(op);
         this.$emit("ack", op.txid);
         if (op.type == "cja") {
@@ -59,6 +59,10 @@ export default {
           this.broadcastComment(op);
         } else if (this.op.type == "vote") {
           this.broadcastVote(op);
+        } else if (this.op.type == "raw") {
+          this.broadcastRaw(op);
+        } else if (this.op.type == "sign_headers") {
+          this.signHeaders(op);
         }
         localStorage.setItem("pending", JSON.stringify(this.ops));
       }
@@ -135,6 +139,41 @@ export default {
           console.log(e);
         });
     },
+    broadcastRaw(obj) {
+      var op = [
+        this.user,
+        obj.op,
+        obj.key || 'active',
+      ];
+      this.sign(op)
+        .then((r) => {
+          if(obj.id)this.statusFinder(r, obj);
+        })
+        .catch((e) => {
+          console.log(e);
+        });
+    },
+    signHeaders(obj) {
+      var op = [
+        this.user,
+        obj.challenge,
+        obj.key || 'posting',
+      ];
+      this.signOnly(op)
+        .then((r) => {
+          console.log('signHeaders Return', r)
+          if(r){
+            localStorage.setItem(
+            `${this.user}:auth`,
+            `${obj.challenge}:${r}`
+          );
+          obj.callbacks[0](`${obj.challenge}:${r}`, console.log('callback?'));
+          }
+        })
+        .catch((e) => {
+          console.log(e);
+        });
+    },
     broadcastVote(obj) {
       var op = [
         this.user,
@@ -202,6 +241,64 @@ export default {
           this.HSRsign(op);
           reject("No TXID");
         }
+      });
+    },
+    signOnly(op) {
+      return new Promise((resolve, reject) => {
+        if (this.HKC) {
+          console.log("HKC");
+          this.HKCsignOnly(op)
+            .then((r) => resolve(r))
+            .catch((e) => reject(e));
+        } else if (this.HAS) {
+          console.log({ op });
+          this.HASsignOnly(op)
+            .then((r) => resolve(r))
+            .catch((e) => reject(e))
+        } else {
+          alert('This feature is not supported with Hive Signer')
+          //this.HSRsignOnly(op);
+          reject("Not Supported");
+        }
+      });
+    },
+    HASsignOnly(op){
+      return new Promise ((res, rej) => {
+        const now = new Date().getTime();
+        if (now > this.HAS_.expire) {
+          alert(`Hive Auth Session expired. Please login again.`);
+          return;
+        }
+        const sign_data = {
+          key_type: op[2],
+          challenge: `${op[0]}:${op[1]}`
+        };
+        const data = CryptoJS.AES.encrypt(
+          JSON.stringify(sign_data),
+          this.HAS_.auth_key
+        ).toString();
+        const payload = {
+          cmd: "challenge_req",
+          account: this.user,
+          token: this.HAS_.token,
+          data: data,
+        };
+        this.HAS_.ws.send(JSON.stringify(payload));
+        alert("Review and Sign on your PKSA App");
+      })
+    },
+    HKCsignOnly(op){
+      return new Promise((res, rej) => {
+        console.log(op)
+        window.hive_keychain.requestSignBuffer(
+          op[0],
+          `${op[0]}:${op[1]}`,
+          op[2],
+          (sig) => {
+            if (sig.error) rej(sig);
+            else res(sig.result);
+          }
+        );
       });
     },
     HSRsign(op) {
@@ -372,6 +469,21 @@ export default {
                 break;
               case "sign_err":
                 this.HAS_.ws_status = `transaction ${message.uuid} failed: ${message.error}`;
+                break;
+              case "challenge_wait":
+                this.HAS_.ws_status = `challenge ${message.uuid} is waiting for signature`;
+                break;
+              case "challenge_ack":
+                this.HAS_.ws_status = `challenge ${message.uuid} signed`;
+                console.log(message);
+                console.log(message.data);
+                //this.statusFinder(r, obj);
+                break;
+              case "challenge_nack":
+                this.HAS_.ws_status = `challenge ${message.uuid} has been declined`;
+                break;
+              case "challenge_err":
+                this.HAS_.ws_status = `challenge ${message.uuid} failed: ${message.error}`;
                 break;
             }
           }
@@ -625,28 +737,27 @@ export default {
           <li class="nav-item"><a class="nav-link" href="/dex/"><i class="fa-solid fa-building-columns me-2"></i>DEX</a></li>
           <li class="nav-item"><a class="nav-link" href="/docs/"><i class="fa-solid fa-book me-2"></i>DOCS</a></li>
         </ul>
-        <!--user dropdown
-	      <ul class="navbar-nav d-none" v-show="user" id="userMenu">
-          <li class="nav-item d-flex align-items-center d-none"><a class="nav-link" href="/new/"><i class="fa-solid fa-plus me-2"></i>CREATE</a></li>
-		      <li class="nav-item dropdown">
+        <!--user dropdown-->
+	      <ul class="navbar-nav" v-show="user" id="userMenu">
+          <li class="nav-item d-flex align-items-center"><a class="nav-link" href="/new/"><i class="fa-solid fa-plus me-2"></i></a></li>
+		      <li class="nav-item dropdown d-flex align-items-center"></li>
+          <a href="#" v-show="user" class="p-0 nav-link d-flex align-items-center text-white-50" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers">
+            <img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light cover"></a>
 		        <a class="nav-link dropdown-toggle dropdown-bs-toggle text-white-50" id="userDropdown" role="button" aria-expanded="false" data-bs-toggle="dropdown" href="#">
-			      <img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light me-1 cover">
 			      <span id="userName" class="me-1">{{user}}</span></a>
-            <ul class="dropdown-menu dropdown-menu-dark pt-0" aria-labelledby="userDropdown">
-			        <li class="d-none"><a class="dropdown-item disabled" href="/me#blog/" onClick="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
-			        <li class="d-none"><a class="dropdown-item disabled" href="/me#wallet/" onClick="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
-			        <li class="d-none"><a class="dropdown-item disabled" href="/me#inventory/" onClick="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
-			        <li class="d-none"><a class="dropdown-item disabled" href="/me#node/" onClick="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
-			        <li class="d-none"><a class="dropdown-item disabled" href="/me#settings/" onClick="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
-              <li class="d-none"><hr class="dropdown-divider"></li>
-			        <li class="d-none"><a class="dropdown-item disabled" href="/about/"><i class="fas fa-info-circle fa-fw me-2"></i>About</a></li>
-              <li class="d-none"><hr class="dropdown-divider"></li>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end pt-0" aria-labelledby="userDropdown">
+			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" onClick="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" onClick="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" onClick="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" onClick="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" onClick="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
+              <li class=""><hr class="dropdown-divider"></li>
+			        <li class=""><a class="dropdown-item" href="/about/"><i class="fas fa-info-circle fa-fw me-2"></i>About</a></li>
+              <li class=""><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="#" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers"><i class="fas fa-user-friends me-2"></i>Users</a></li>
 			        <li><a class="dropdown-item" href="#" @click="logout()"><i class="fas fa-power-off fa-fw me-2"></i>Logout</a></li>
 		        </ul>
-          </li>
         </ul>
-        -->
       </div>
       <!--pwa brand-->
       <a class="navbar-brand d-sm-none d-flex align-items-center" href="/"><img src="/img/dlux-hive-logo-alpha.svg" alt="dlux-logo" width="40" height="40" class="me-2"><h1 class="m-0">DLUX</h1></a>
@@ -656,12 +767,22 @@ export default {
           <li class="nav-item"></li>
           <li class="nav-item"><button class="btn btn-primary ms-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers">Login</button></li>
         </ul>
-        <ul class="navbar-nav" v-show="user">
+        <ul class="navbar-nav d-sm-none" v-show="user">
           <li>
-            <a href="#" v-show="user" class="nav-link d-flex align-items-center text-white-50" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers">
-            <img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light me-1 cover">
-            <span id="userName" class="ms-2 d-none d-md-block">{{user}}</span>
-            </a>
+		        <a class="nav-link dropdown-toggle dropdown-bs-toggle text-white-50 text-end" id="userDropdown" role="button" aria-expanded="false" data-bs-toggle="dropdown" href="#">
+			      <span id="userName" class="ms-auto me-1"><img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light cover"></span></a>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end pt-0" aria-labelledby="userDropdown" style="position: absolute;">
+			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" onClick="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" onClick="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" onClick="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" onClick="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" onClick="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
+              <li class=""><hr class="dropdown-divider"></li>
+			        <li class=""><a class="dropdown-item" href="/about/"><i class="fas fa-info-circle fa-fw me-2"></i>About</a></li>
+              <li class=""><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="#" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers"><i class="fas fa-user-friends me-2"></i>Users</a></li>
+			        <li><a class="dropdown-item" href="#" @click="logout()"><i class="fas fa-power-off fa-fw me-2"></i>Logout</a></li>
+		        </ul>
           </li>
         </ul>
       </div>

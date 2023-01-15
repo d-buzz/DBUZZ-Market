@@ -2,7 +2,7 @@
 
 ### Prerequisites
 
-* [Hive account](https://signup.hive.io/) with 100 Hive Power worth of Resource Credits available for each node you wish to install
+* [Hive account](https://signup.hive.io/) with ~300 Hive Power worth of Resource Credits available for each node you wish to install
 * SSH private and .pub key for your computer ([Mac/Linux](https://docs.oracle.com/en/cloud/cloud-at-customer/occ-get-started/generate-ssh-key-pair.html), [Windows](https://docs.joyent.com/public-cloud/getting-started/ssh-keys/generating-an-ssh-key-manually/manually-generating-your-ssh-key-in-windows))
 * Domain Name Registrar such as [Namecheap](https://namecheap.com/) for your API domain names
 
@@ -73,11 +73,24 @@ Once you have an up-to-date ubuntu server with docker, you can install Honeycomb
 2. Type `touch .env && nano .env` to edit the node attributes
    - Type the following into the text editor: 
 ```
+# This is an example file. Uncomment and change any variables you would like to override.
+# The HIVE account running the node (defaults to disregardfiat)
 account="hiveaccount"
+# The HIVE account active private key
 active=5JactivePrivateKey
+# Your API public address (deafults to http://dlux-token.herokuapp.com)
+domain=https://api.yourdomain.com
+# Required for Spkcc Network and DUAT
 msowner=5KadditionalPrivateKey
 mspublic=STMpublickey
-domain=https://api.yourdomain.com
+# Your API port (defaults to 3001)
+#PORT=3001
+# Your bidRate (defaults to 2500)
+#BIDRATE=2500
+# Your History based HIVE node for startup purposes
+#STARTURL=<HIVE_RPC_Node_with_History>
+# Your blockbased HIVE node for getting blocks and broadcasting transactions
+#APIURL=<Any_HIVE_RPC_Node>
 ```
    - Optionally you can include `discordwebhook=https://discordapp.com/api/webhooks/NUMB3RS/KeYs` to stream the feed into a discord channel
 3. Save & exit
@@ -171,6 +184,10 @@ volumes:
 
 ---
 
+### Deploy with Pm2 (Alternative to Docker)
+
+https://hive.blog/hive-163521/@balaz/step-by-step-guide-to-deploy-and-run-honeycomb-node-without-using-docker
+
 ### Nginx Setup
 Finally, install certbot to manage the SSL certificate(s) for the API domain(s)
 
@@ -231,6 +248,12 @@ server{
 To test, visit your subdomain in a browser and verify a secure https connection. You should see your API returning data.
 
 ---
+
+### Caddy Setup (Alternative to NGINX)
+
+This is not a mandatory step for running your node. If your Docker or Pm2 is already running your node, you are done. This step covers hosting your node using Caddy and associating a domain or sub domain to your node. 
+
+https://stemgeeks.net/hive-163521/@balaz/step-by-step-guide-to-associate-a-domain-or-sub-domain-to-your-honeycomb-spkcc-node-using-caddy
 
 ### Governance And Voting
 Now that you have a functioning node running, go to [dlux.io/dex](https://vue.dlux.io/dex) and choose the token for the community node you installed. Login with the account matching the node `.env` file.

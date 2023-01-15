@@ -56,9 +56,8 @@ var app = new Vue({
   el: "#app", // vue 2
   data() {
     return {
+      block:{},
       ohlcv: [],
-      hidePrompt: true,
-      hasHiddenPrompt: true,
       chart: {
         id: "honeycomb_tv",
         width: 600,
@@ -327,17 +326,31 @@ var app = new Vue({
         this.toSign = {};
       }
     },
+    currentBlock(){
+      fetch(this.lapi)
+      .then((r) => {
+        return r.json();
+      })
+      .then(json=>{
+        console.log(json)
+        this.stats = json.result
+        this.getBlock(json.result.lastBlock)
+      })
+    },
+    getBlock(hash = "QmbtVQ5v3Nrtk8rLkSJpNKr5tFEEY613iAtQPGBBdRqwSy"){
+      
+      fetch(`https://ipfs.io/ipfs/${hash}`)
+      .then((r) => {
+        return r.json();
+      })
+      .then(json=>{
+        this.block[hash] = json
+      })
+    },
     run(op){
       if (typeof this[op] == 'function' && this.account != 'GUEST') {
         this[op](this.account);
       }
-    },
-    onResize(event) {
-      this.chart.width = this.$refs.chartContainer.scrollWidth - 15;
-      this.chart.height = this.chart.width / 2.5;
-      this.$refs.dumbo.style = `width: ${this.chart.width}px; height: ${
-        this.chart.height + 30
-      }px;`;
     },
     saveNodeSettings() {
       let updates = {};
@@ -1213,30 +1226,6 @@ var app = new Vue({
           this.stats = data.stats;
         });
     },
-    voteProposal(num) {
-      this.toSign = {
-        type: "raw",
-        op: [
-          [
-            "update_proposal_votes",
-            {
-              voter: user,
-              proposal_ids: [`${num}`],
-              approve: true,
-            },
-          ],
-        ],
-        msg: `Supporting Proposal${num}`,
-        ops: ["banishPrompt"],
-        txid: `Update Proposal Votes`,
-      };
-      this.hasHiddenPrompt = true;
-    },
-    banishPrompt() {
-      localStorage.setItem(`hhp:${user}`, new Date().getTime());
-      this.hasHiddenPrompt = true
-      console.log('BANISH')
-    },
     getRecents(){
       fetch(this.lapi + "/api/recent/HIVE_" + this.TOKEN + "?limit=1000")
         .then((response) => response.json())
@@ -1384,31 +1373,6 @@ var app = new Vue({
             this.barhive = this.accountinfo.balance;
             this.barhbd = this.accountinfo.hbd_balance;
           });
-        if (localStorage.getItem(`hhp:${user}`) && 
-          localStorage.getItem(`hhp:${user}`) >
-          new Date().getTime() - 86400000
-        )this.hasHiddenPrompt = true
-        else {
-          this.hasHiddenPrompt = false;
-          localStorage.removeItem(`hhp:${user}`);
-        }
-          fetch("https://api.hive.blog", {
-            body: `{"jsonrpc":"2.0", "method":"condenser_api.list_proposal_votes", "params":[["${user}", 234], 1, "by_voter_proposal", "ascending", "active"], "id":1}`,
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method: "POST",
-          })
-            .then((response) => response.json())
-            .then((data) => {
-              console.log(data);
-              if (
-                data.result[0].proposal.proposal_id == 234 &&
-                data.result[0].voter == user
-              )
-                this.hidePrompt = true;
-              else this.hidePrompt = false;
-            });
     },
     popDEX() {
       fetch(this.lapi + "/dex")
@@ -1494,20 +1458,12 @@ var app = new Vue({
           if (this.hivebuys[0]) this.sellPrice = this.hivebuys[0].rate;
         });
     },
+    findCurrent() {
+      
+    }
   },
   mounted() {
-    this.chart.width = this.$refs.chartContainer.scrollWidth - 15;
-    this.chart.height = this.chart.width / 2.5;
-    this.$refs.dumbo.style = `width: ${this.chart.width}px; height: ${
-      this.chart.height + 30
-    }px;`;
-    window.addEventListener("resize", this.onResize);
-    this.getQuotes();
-    this.getNodes();
-    this.getProtocol();
-    this.popDEX(user);
-    if (user != "GUEST") this.getTokenUser(user);
-    if (user != "GUEST") this.getHiveUser(user);
+    this.currentBlock()
   },
   computed: {
     chartTitle: {

@@ -51,6 +51,20 @@ var app = new Vue({
     return {
       account: user,
       toSign: {},
+      tickers: {
+        DLUX:{
+          change:"",
+          tick:""
+        },
+        DUAT:{
+          change:"",
+          tick:""
+        },
+        LARYNX:{
+          change:"",
+          tick:""
+        }
+      },
       lapi: lapi,
       hapi: hapi,
       accountapi: {},
@@ -304,6 +318,17 @@ var app = new Vue({
           this.hbdprice = data;
         });
     },
+    getTickers(){
+      fetch("https://data.dlux.io/hc/tickers")
+        .then((response) => response.json())
+        .then((data) => {
+          var tickers = {}
+          for(var i = 0; i < data.tickers.length; i++){
+            tickers[data.tickers[i].token] = data.tickers[i] 
+          }
+          this.tickers = tickers
+        });
+    },
     getNodes() {
       fetch(this.lapi + "/runners")
         .then((response) => response.json())
@@ -327,7 +352,7 @@ var app = new Vue({
           this.multisig = data.multisig;
           this.jsontoken = data.jsontoken;
           this.TOKEN = data.jsontoken.toUpperCase();
-          location.hash = data.jsontoken;
+          //location.hash = data.jsontoken;
           this.node = data.node;
           this.features = data.features ? data.features : this.features;
           this.behind = data.behind;
@@ -472,6 +497,7 @@ var app = new Vue({
     this.getQuotes();
     this.getNodes();
     this.getProtocol();
+    this.getTickers();
     // if (user != "GUEST") this.getTokenUser(user);
     // if (user != "GUEST") this.getHiveUser(user);
   },
