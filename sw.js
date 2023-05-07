@@ -1,4 +1,4 @@
-this.version = 1.0;
+this.version = 1.2;
 
 console.log(
   "SW:" + this.version + " - online."
@@ -20,7 +20,6 @@ var urlsToCache = [
   "/docs/README.md",
   "/docs/release.md",
   "/docs/token-actions.md",
-  "/hub/Crater.glb",
   "/hub/index.html",
   "/img/dex-vr-comp.jpg",
   "/img/dlux-icon-192.png",
@@ -38,12 +37,16 @@ var urlsToCache = [
   "/js/footvue.js",
   "/js/indexvue.js",
   "/js/navue.js",
-  "/js/nftvue.js",
+  "/js/nftsvue.js",
   "/js/toastvue.js",
   "/js/trading-vue.min.js",
   "/nfts/index.html",
   "/nfts/set/index.html",
   "/nfts/sets/index.html",
+  "/new/360-gallery/index.html",
+  "/new/advanced/index.html",
+  "/blog/index.html",
+  "/dlux/index.html",
 ];
 
 self.addEventListener("install", function (event) {
@@ -69,10 +72,12 @@ self.addEventListener("fetch", function (event) {
         }
         var responseToCache = response.clone();
 
+        if(!(event.request.url.startsWith('http'))){
         caches.open(CACHE_NAME).then(function (cache) {
+          if (!/^https?:$/i.test(new URL(event.request.url).protocol)) return;
           cache.put(event.request, responseToCache);
         });
-
+      }
         return response;
       });
     })

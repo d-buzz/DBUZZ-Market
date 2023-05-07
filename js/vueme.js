@@ -6,6 +6,9 @@ import Popper from "/js/pop.js";
 import Modals from "/js/modalvue.js";
 import Marker from "/js/marker.js";
 import Ratings from "/js/ratings.js";
+import MDE from "/js/mde.js";
+import Replies from "/js/replies.js";
+import CardVue from "./cardvue.js";
 
 let url = location.href.replace(/\/$/, "");
 let lapi = "",
@@ -45,20 +48,16 @@ if (location.search) {
 if (!lapi) {
   lapi = "https://token.dlux.io";
 }
-console.log(lapi);
 if (
   lapi == "https://token.dlux.io" ||
   lapi == "https://spkinstant.hivehoneycomb.com" ||
-  lapi == "https://duat.hivehoneycomb.com"
+  lapi == "https://inconceivable.hivehoneycomb.com"
 ) {
   console.log("using defaults");
   //window.history.replaceState(null, null, "dex");
 }
 let user = localStorage.getItem("user") || "GUEST";
 let hapi = localStorage.getItem("hapi") || "https://api.hive.blog";
-console.log({
-  lapi,
-});
 
 Vue.directive("scroll", {
   inserted: function (el, binding) {
@@ -73,6 +72,8 @@ var app = new Vue({
   el: "#app", // vue 2
   data() {
     return {
+      fileRequests: {},
+      relations: {"follows":false,"ignores":false,"blacklists":false,"follows_blacklists":false,"follows_muted":false},
       sets: {},
       disablePost: true,
       File: [],
@@ -115,7 +116,7 @@ var app = new Vue({
       },
       providers: [
         { api: "https://token.dlux.io", token: "dlux" },
-        { api: "https://duat.hivehoneycomb.com", token: "duat" },
+        { api: "https://inconceivable.hivehoneycomb.com", token: "duat" },
       ],
       scripts: {},
       nftscripts: {},
@@ -275,6 +276,7 @@ var app = new Vue({
         max: 0,
       },
       pageAccount: "",
+      pagePermlink: "",
       pfp: {
         set: "",
         uid: "",
@@ -627,6 +629,7 @@ var app = new Vue({
       },
       posturls: {},
       new: [],
+      theirs: [],
       trending: [],
       promoted: [],
       search: [],
@@ -634,7 +637,7 @@ var app = new Vue({
         sort: "time",
         searchTerm: "",
         bitMask: 0,
-        entry: "new",
+        entry: "theirs",
         search: {
           a: 10,
           o: 0,
@@ -654,6 +657,12 @@ var app = new Vue({
           p: false,
         },
         promoted: {
+          a: 10,
+          o: 0,
+          e: false,
+          p: false,
+        },
+        theirs: {
           a: 10,
           o: 0,
           e: false,
@@ -763,6 +772,9 @@ var app = new Vue({
         items: [],
       },
       authors: {},
+      spkapi: {},
+      extendcost: {},
+      contracts: {},
     };
   },
   components: {
@@ -773,13 +785,23 @@ var app = new Vue({
     "modal-vue": Modals,
     "vue-markdown": Marker,
     "vue-ratings": Ratings,
+    "mde": MDE,
+    "replies": Replies,
+    "card-vue": CardVue,
   },
   methods: {
     getSetPhotos(s, c) {
       return s.set ? `https://ipfs.io/ipfs/${s.set[c]}` : "";
     },
+    getSPKUser(user) {
+      if (user)
+        fetch("https://spktest.dlux.io/@" + user)
+          .then((response) => response.json())
+          .then((data) => {
+            this.spkapi = data
+          });
+    },
     uploadFile(e) {
-      console.log(e)
         for (var i = 0; i < e.target.files.length; i++) {
           var reader = new FileReader();
           reader.File = e.target.files[i]
@@ -791,7 +813,7 @@ var app = new Vue({
                 && this.File[i].size == event.currentTarget.File.size
               ) {
                 Hash.of(fileContent).then((hash) => {
-                  const dict = {hash, index:i, size: event.currentTarget.File.size, name: event.currentTarget.File.name, path:e.target.id}
+                  const dict = {hash, index:i, size: event.currentTarget.File.size, name: event.currentTarget.File.name, path:e.target.id, progress: '..........'}
                   this.FileInfo[dict.name] = dict
                   // this.File[i].md5 = hash;
                   // this.File[i].blob = new Blob([fileContent], event.currentTarget.File.name)
@@ -804,7 +826,7 @@ var app = new Vue({
           };
           reader.readAsBinaryString(e.target.files[i]);
           var File = e.target.files[i];
-          // File.pin = true;
+           File.progress = '..........';
           // File.hash = "";
           // File.md5 = ""
           this.File.push(File);
@@ -870,6 +892,24 @@ var app = new Vue({
 				this.postPermlink = text;
 			}
 		},
+    follow(acc, what = 'blog'){
+      this.toSign = {
+        type: "raw",
+        key: "posting",
+        op: [["follow", {follower: this.account, following: acc, what: [what]}]],
+        callbacks: [res],
+        txid: "Sign Auth Headers",
+      }
+    },
+    unfollow(acc){
+      this.toSign = {
+        type: "raw",
+        key: "posting",
+        op: [["follow", {follower: this.account, following: acc, what: []}]],
+        callbacks: [],
+        txid: "unfollow:" + acc,
+      }
+    },
     post() {
 			var tags = this.postTags.toLowerCase().split(',')
 			this.postCustom_json.tags = ['dlux']
@@ -878,7 +918,6 @@ var app = new Vue({
 					this.postCustom_json.tags.push(tags[i].replace(/[\W_]+/g, "-"));
 				}
 			}
-			console.log(custom_json.tags)
 			if (this.account) {
 				const operations = [["comment",
 					{
@@ -926,9 +965,9 @@ var app = new Vue({
       }
       return `linear-gradient(${r})`;
     },
-    update: _.debounce(function(e) {
-            this.postBody = e.target.value;
-          }, 300),
+    // update: _.debounce(function(e) {
+    //         this.postBody = e.target.value;
+    //       }, 300),
     breakIt(it, reset) {
       if (reset) {
         this.SL = [];
@@ -1012,40 +1051,185 @@ var app = new Vue({
         }
       });
     },
-    ipfsUpload(name) {
-      this.validateHeaders(this.FileInfo[name].hash).then((headers) => {
-        var formdata = new FormData();
-        console.log(this.FileInfo[name].path)
-        console.log(document.getElementById(this.FileInfo[name].path))
-        formdata.append('file', document.getElementById(this.FileInfo[name].path).files[0]);
-        formdata.append(
-          "path",
-          `/${headers.split(":")[0]}/${headers.split(":")[1]}.${this.account}`
+    upload(cid = 'QmYJ2QP58rXFLGDUnBzfPSybDy3BnKNsDXh6swQyH7qim3', contract = {api: 'https://127.0.0.1:5050', id: '1668913215284', sigs: {QmYJ2QP58rXFLGDUnBzfPSybDy3BnKNsDXh6swQyH7qim3: '20548a0032e0cf51ba75721743d2ec6fac180f7bc773ce3d77b769d9c4c9fa9dbb7d59503f05be8edcaac00d5d66709b0bce977f3207785913f7fbad2773ae4ac2'}}){
+   
+      const ENDPOINTS = {
+          UPLOAD: `${contract.api}/upload`,
+          UPLOAD_STATUS: `${contract.api}/upload-check`,
+          UPLOAD_REQUEST: `${contract.api}/upload-authorize`
+      };
+      const defaultOptions = {
+          url: ENDPOINTS.UPLOAD,
+          startingByte: 0,
+          cid,
+          onAbort() {},
+          onProgress() {},
+          onError() {},
+          onComplete() {}
+      };
+      const uploadFileChunks = (file, options) => {
+        const formData = new FormData();
+        const req = new XMLHttpRequest();
+        const chunk = file.slice(options.startingByte);
+        
+        formData.append('chunk', chunk, file.name);
+        formData.append('cid', options.cid);
+        
+        req.open('POST', options.url, true);
+        req.setRequestHeader(
+          'Content-Range',    `bytes=${options.startingByte}-${options.startingByte+chunk.size}/${file.size}`
         );
-        for (const value of formdata.values()) {
-          console.log(value);
-        }
-        var myHeaders = new Headers()
-        myHeaders.append("Content-Type", "multipart/form-data")
-        var requestOptions = {
-          method: "POST",
-          body: formdata,
-          headers: myHeaders,
-          mode: 'cors',
-          //redirect: "follow",
-          //credentials: 'include',
+        req.setRequestHeader('X-Cid', options.cid);
+        
+        req.onload = (e) => {
+              if (req.status === 200) {
+                  options.onComplete(e, file);
+              } else {
+                  options.onError(e, file);
+              }
+            };
+        
+        req.upload.onprogress = (e) => {
+          const loaded = options.startingByte + e.loaded;
+          options.onProgress({...e,
+            loaded,
+            total: file.size,
+            percentage: loaded * 100 / file.size
+          }, file);
         };
-        fetch(
-          `https://ipfs.dlux.io/api/v0/add?stream-channels=true&pin=false&wrap-with-directory=false&progress=true&account=${this.account}&cid=${headers.split(":")[0]}&sig=${headers.split(":")[1]}`,
-          //`https://ipfs.dlux.io/api/v0/add?stream-channels=true&pin=false&wrap-with-directory=false&progress=true&account=${this.account}&cid=${headers.split(":")[0]}&sig=${headers.split(":")[1]}`,
-          requestOptions
-        )
-          .then((response) => {
-            response.text()
-            console.log(response)
+        
+        req.ontimeout = (e) => options.onError(e, file);
+        
+        req.onabort = (e) => options.onAbort(e, file);
+        
+        req.onerror = (e) => options.onError(e, file);
+        
+        this.fileRequests[cid].request = req;
+        
+        req.send(formData);
+      };
+      const uploadFile = (file, options) => {
+        return fetch(ENDPOINTS.UPLOAD_REQUEST, {
+          method: 'GET',
+          headers: {
+              'Content-Type': 'application/json',
+              'sig': contract.sigs[cid],
+              'account': this.account,
+              'contract': contract.id,
+              'cid': cid
+            }
           })
-          .then((result) => console.log(result))
-          .catch((error) => console.log("error", error));
+          .then(res => res.json())
+          .then(res => {
+              options = {...options, ...res};
+              this.fileRequests[cid] =  {request: null, options}
+              uploadFileChunks(file, options);
+          })
+          .catch(e => {
+              options.onError({...e, file})
+      })
+   };
+   const abortFileUpload = (file) => {};
+   const retryFileUpload = (file) => {};
+   const clearFileUpload = (file) => {};
+   const resumeFileUpload = (file) => {
+      const fileReq = this.fileRequests[cid];
+		
+        if (fileReq) {
+      return fetch(
+              `${ENDPOINTS.UPLOAD_STATUS}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'sig': contract.sigs[cid],
+                    'account': this.account,
+                    'contract': contract.id,
+                    'cid': cid
+                  }
+                })
+      .then(res => res.json())
+      .then(res => {
+                uploadFileChunks(
+                  file, 
+                  {
+                      ...fileReq.options, 
+                      startingByte: Number(res.totalChunkUploaded)
+                  }
+                );
+      })
+      .catch(e => {
+                fileReq.options.onError({...e, file})
+      })
+    }
+   };
+   return (files, options = defaultOptions) => {
+      [...files]
+        .forEach(file => {
+            uploadFile(file, {...defaultOptions, ...options})
+        });
+		
+	return {
+	    abortFileUpload,
+            retryFileUpload,
+	    clearFileUpload,
+	    resumeFileUpload
+	};
+   }
+    },
+    uploadAndTrack(name, contract) {
+      this.validateHeaders(this.FileInfo[name].hash).then((headers) => {
+        let uploader = null;
+        const setFileElement = (file) => {
+          // create file element here
+        }
+        const onProgress = (e, file) => {};
+        const onError = (e, file) => {};
+        const onAbort = (e, file) => {};
+        const onComplete = (e, file) => {};
+        return (uploadedFiles) => {
+          [...uploadedFiles].forEach(setFileElement);
+      
+        //append progress box
+        uploader = uploadFiles(uploadedFiles, {
+            onProgress,
+            onError,
+            onAbort,
+            onComplete
+        });
+      }
+        // var formdata = new FormData();
+        // console.log(this.FileInfo[name].path)
+        // console.log(document.getElementById(this.FileInfo[name].path))
+        // formdata.append('file', document.getElementById(this.FileInfo[name].path).files[0]);
+        // formdata.append(
+        //   "path",
+        //   `/${headers.split(":")[0]}/${headers.split(":")[1]}.${this.account}`
+        // );
+        // for (const value of formdata.values()) {
+        //   console.log(value);
+        // }
+        // var myHeaders = new Headers()
+        // myHeaders.append("Content-Type", "multipart/form-data")
+        // var requestOptions = {
+        //   method: "POST",
+        //   body: formdata,
+        //   headers: myHeaders,
+        //   connection: 'keep-alive', 
+        //   mode: 'cors',
+        //   redirect: "follow",
+        //   //credentials: 'include',
+        // };
+        // fetch(
+        //   `https://ipfs.dlux.io/api/v0/add?stream-channels=true&pin=false&wrap-with-directory=false&progress=true&account=${this.account}&cid=${headers.split(":")[0]}&sig=${headers.split(":")[1]}`,
+        //   //`https://ipfs.dlux.io/api/v0/add?stream-channels=true&pin=false&wrap-with-directory=false&progress=true&account=${this.account}&cid=${headers.split(":")[0]}&sig=${headers.split(":")[1]}`,
+        //   requestOptions
+        // )
+        //   .then((response) => {
+        //     response.text()
+        //     console.log(response)
+        //   })
+        //   .then((result) => console.log(result))
+        //   .catch((error) => console.log("error", error));
       });
     },
     /*
@@ -1255,7 +1439,6 @@ function tradeFTreject(setname, uid, callback){
     },
 
     rejectFT(item) {
-      console.log({ item });
       var cja = {
           set: item.set,
           uid: item.uid,
@@ -1425,7 +1608,7 @@ function setPFP(setname, uid, callback){
     apiFor(prefix) {
       if (prefix == "dlux_") return "https://token.dlux.io";
       if (prefix == "spkcc_") return "https://spkinstant.hivehoneycomb.com";
-      if (prefix == "duat_") return "https://duat.hivehoneycomb.com";
+      if (prefix == "duat_") return "https://inconceivable.hivehoneycomb.com";
       else return "";
     },
     meltNFT(item) {
@@ -1702,14 +1885,33 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       out = out.replace(/\.?0+$/, "");
       return out + post;
     },
+    reply(deets){
+      this.toSign = {
+        type: "raw",
+        key: "posting",
+        op: [["comment", deets]],
+        callbacks: [], //get new replies for a/p
+        txid: `reply:${deets.parent_author}/${deets.permlink}`,
+      }
+    },
     vote(url) {
+      var key, slider, flag
+      if(typeof url == 'object'){
+        slider = url.slider
+        flag = url.flag
+        url = url.url
+      } else {
+        key = `/@${url.split("/@")[1].split("/")[0]}/${url.split("/@")[1].split("/")[1]}`
+        slider = this.posturls[key].slider
+        flag = this.posturls[key].flag
+      }
       this.toSign = {
         type: "vote",
         cj: {
           author: url.split("/@")[1].split("/")[0],
           permlink: url.split("/@")[1].split("/")[1],
           weight:
-            this.posturls[url].slider * (this.posturls[url].flag ? -1 : 1),
+            slider * (flag ? -1 : 1),
         },
         msg: `Voting ...`,
         ops: [""],
@@ -1743,6 +1945,9 @@ function bidNFT(setname, uid, bid_amount, type, callback){
     pending(url, text) {
       this.posturls[url].comment = text;
       this.comment(url);
+    },
+    setRating(url, rating){
+      this.posturls[url].rating = rating;
     },
     comment(url) {
       var meta = this.posturls[url].edit
@@ -1823,35 +2028,18 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       this[modal].item = this[modal].items[this[modal].index];
     },
     modalSelect(key) {
+      if(key.indexOf('/@') > 0)
+        key = '/@' + key.split('/@')[1];
       this.displayPost.index = key;
       this.displayPost.item = this.posturls[key];
+      window.history.pushState("Blog Modal", this.displayPost.item.title, "/blog/@" + key.split('/@')[1]);
       if (
-        this.displayPost.item.children &&
+        this.displayPost.item?.children &&
         !this.displayPost.item.replies.length
-      )
-        this.getReplies(
+      )this.getReplies(
           this.displayPost.item.author,
           this.displayPost.item.permlink
-        ).then((r) => {
-          this.posturls[key].replies = r.result;
-          for (let i = 0; i < this.posturls[key].replies.length; i++) {
-            if (this.posturls[key].replies[i].json_metadata) {
-              try {
-                this.posturls[key].replies[i].json_metadata = JSON.parse(
-                  this.posturls[key].replies[i].json_metadata
-                );
-                this.posturls[key].replies[i].edit = false;
-              } catch (e) {}
-            }
-            this.posturls[this.posturls[key].replies[i].url] =
-              this.posturls[key].replies[i];
-            if (this.posturls[key].replies[i].slider < 0) {
-              this.posturls[key].replies[i].flag = true;
-              this.posturls[key].replies[i].slider =
-                this.posturls[key].replies[i].slider * -1;
-            }
-          }
-        });
+        )
     },
     getRewardFund() {
       fetch(this.hapi, {
@@ -1949,8 +2137,33 @@ function bidNFT(setname, uid, bid_amount, type, callback){
         })
           .then((res) => res.json())
           .then((r) => {
-            if (k) r.key = k;
-            resolve(r);
+          const key = `/@${a}/${p}`
+          var authors = []
+          for (let i = 0; i < r.result.length; i++) {
+            authors.push(r.result[i].author)
+            r.result[i].edit = false;
+            if(r.result[i].children)this.getReplies(r.result[i].author, r.result[i].permlink)
+            if (r.result[i].json_metadata) {
+              try {
+                r.result[i].json_metadata = JSON.parse(
+                  r.result[i].json_metadata
+                );
+              } catch (e) {}
+            }
+            const repKey =`/@${r.result[i].author}/${r.result[i].permlink}`
+            this.posturls[repKey] =
+              r.result[i];
+            if (r.result[i].slider < 0) {
+              r.result[i].flag = true;
+              r.result[i].slider =
+                r.result[i].slider * -1;
+
+            }
+            this.posturls[repKey].rep = "...";
+            this.rep(repKey)
+          }
+          this.posturls[key].replies = r.result;
+          this.getHiveAuthors(authors)
           })
           .catch((err) => {
             reject(err);
@@ -1961,6 +2174,23 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       if (typeof this[op] == "function" && this.account != "GUEST") {
         this[op](this.account);
       }
+    },
+    accountRelations(name) {
+      fetch("https://api.hive.blog", {
+        body: `{\"jsonrpc\":\"2.0\", \"method\":\"bridge.get_relationship_between_accounts\", \"params\":[\"${this.account}\",\"${name}\"], \"id\":5}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+        .then((r) => {
+          return r.json();
+        })
+        .then((re) => {
+          var rez = re.result
+          console.log(rez)
+          this.relations = rez
+        });
     },
     checkAccount(name, key) {
       fetch("https://anyx.io", {
@@ -1975,7 +2205,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
         })
         .then((re) => {
           var rez = re.result[0];
-          console.log(name, rez, rez.posting_json_metadata);
           try {
             rez.posting_json_metadata = JSON.parse(rez.posting_json_metadata);
           } catch (e) {
@@ -2010,7 +2239,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       } else alert("Username not found");
     },
     sendIt(op) {
-      console.log(op);
       this.toSign = op;
     },
     parseInt(a, b = 10) {
@@ -2063,8 +2291,24 @@ function bidNFT(setname, uid, bid_amount, type, callback){
     toUpperCase(value) {
       return value.toUpperCase();
     },
-    formatNumber(t, n, r, e) {
-      if (typeof t != "number") t = parseFloat(t);
+    gt(a,b){
+      return parseFloat(a)>parseFloat(b);
+    },
+    formatNumber(t, n, r, e) { // number, decimals, decimal separator, thousands separator
+      if (typeof t != "number") {
+        const parts = t ? t.split(" ") : []
+        var maybe = 0
+        for (i = 0; i < parts.length; i++) {
+          if (parseFloat(parts[i])>0){
+            maybe += parseFloat(parts[i])
+          }
+        }
+        if (maybe>parseFloat(t)){
+          t = maybe
+        } else {
+          t = parseFloat(t)
+        }
+      }
       if (isNaN(t)) return "Invalid Number";
       if (!isFinite(t)) return (t < 0 ? "-" : "") + "infinite";
       (r = r || "."), (e = e || "");
@@ -2192,6 +2436,9 @@ function bidNFT(setname, uid, bid_amount, type, callback){
               this.postSelect[this.postSelect.entry].e = true;
             for (var i = 0; i < res.result.length; i++) {
               res.result[i].type = "Blog";
+              if(this.postSelect[this.postSelect.entry].o != res.result[i].entry_id - 1){
+                this.postSelect[this.postSelect.entry].o = res.result[i].entry_id - 1;
+              }
               if (
                 !this.posturls[
                   `/@${res.result[i].author}/${res.result[i].permlink}`
@@ -2222,7 +2469,7 @@ function bidNFT(setname, uid, bid_amount, type, callback){
           });
       }
     },
-    selectPosts(modal) {
+    selectPosts(modal, reset) {
       var arr = [];
       for (var i = 0; i < this[this.postSelect.entry].length; i++) {
         if (this.posturls[this[this.postSelect.entry][i]])
@@ -2235,7 +2482,7 @@ function bidNFT(setname, uid, bid_amount, type, callback){
         this[modal[0]].index = modal[1];
       }
     },
-    getContent(a, p) {
+    getContent(a, p, modal) {
       if (a && p) {
         fetch(this.hapi, {
           body: `{"jsonrpc":"2.0", "method":"condenser_api.get_content", "params":["${a}", "${p}"], "id":1}`,
@@ -2247,9 +2494,10 @@ function bidNFT(setname, uid, bid_amount, type, callback){
           .then((r) => r.json())
           .then((res) => {
             if (res.result) {
-              res.result.url = `/@${res.result.author}/${res.result.permlink}`;
-              this.posturls[res.result.url] = {
-                ...this.posturls[res.result.url],
+              const key = `/@${res.result.author}/${res.result.permlink}`
+              res.result.url = key;
+              this.posturls[key] = {
+                ...this.posturls[key],
                 ...res.result,
                 slider: 10000,
                 flag: false,
@@ -2257,76 +2505,112 @@ function bidNFT(setname, uid, bid_amount, type, callback){
                 downVotes: 0,
                 edit: false,
                 hasVoted: false,
+                contract: {}
               };
               for (
                 var i = 0;
-                i < this.posturls[res.result.url].active_votes.length;
+                i < this.posturls[key].active_votes.length;
                 i++
               ) {
-                if (this.posturls[res.result.url].active_votes[i].percent > 0)
-                  this.posturls[res.result.url].upVotes++;
-                else this.posturls[res.result.url].downVotes++;
+                if (this.posturls[key].active_votes[i].percent > 0)
+                  this.posturls[key].upVotes++;
+                else this.posturls[key].downVotes++;
                 if (
-                  this.posturls[res.result.url].active_votes[i].voter ==
+                  this.posturls[key].active_votes[i].voter ==
                   this.account
                 ) {
-                  this.posturls[res.result.url].slider =
-                    this.posturls[res.result.url].active_votes[i].percent;
-                  this.posturls[res.result.url].hasVoted = true;
+                  this.posturls[key].slider =
+                    this.posturls[key].active_votes[i].percent;
+                  this.posturls[key].hasVoted = true;
                 }
               }
+              var contracts = false
               var type = "Blog";
               try {
-                this.posturls[res.result.url].json_metadata = JSON.parse(
-                  this.posturls[res.result.url].json_metadata
+                this.posturls[key].json_metadata = JSON.parse(
+                  this.posturls[key].json_metadata
                 );
-                this.posturls[res.result.url].pic = this.picFind(
-                  this.posturls[res.result.url].json_metadata
+                this.posturls[key].pic = this.picFind(
+                  this.posturls[key].json_metadata
                 );
-
+                if(this.posturls[key].json_metadata.assets){
+                  for(var i = 0; i < this.posturls[key].json_metadata.assets.length; i++){
+                    if(this.posturls[key].json_metadata.assets[i].contract){
+                      this.posturls[key].contract[this.posturls[key].json_metadata.assets[i].contract] = {}
+                      contracts = true
+                    }
+                  }
+                }
+                if(contracts){
+                  this.getContracts(key)
+                }
                 if (
                   "QmNby3SMAAa9hBVHvdkKvvTqs7ssK4nYa2jBdZkxqmRc16" ==
-                  this.posturls[res.result.url].json_metadata.vrHash
+                  this.posturls[key].json_metadata.vrHash ||
+                  "newhashhere" ==
+                  this.posturls[key].json_metadata.vrHash
                 )
                   type = "360";
-                else if (this.posturls[res.result.url].json_metadata.vrHash)
+                else if (this.posturls[key].json_metadata.vrHash)
                   type = "VR";
-                else if (this.posturls[res.result.url].json_metadata.arHash)
+                else if (this.posturls[key].json_metadata.arHash)
                   type = "AR";
-                else if (this.posturls[res.result.url].json_metadata.appHash)
+                else if (this.posturls[key].json_metadata.appHash)
                   type = "APP";
-                else if (this.posturls[res.result.url].json_metadata.audHash)
+                else if (this.posturls[key].json_metadata.audHash)
                   type = "Audio";
-                else if (this.posturls[res.result.url].json_metadata.vidHash)
+                else if (this.posturls[key].json_metadata.vidHash)
                   type = "Video";
               } catch (e) {
-                console.log(res.result.url, e, "no JSON?");
+                console.log(key, e, "no JSON?");
               }
-              this.posturls[res.result.url].type = type;
+              this.posturls[key].type = type;
               if (type != "Blog")
-                this.posturls[res.result.url].url =
-                  "/dlux" + this.posturls[res.result.url].url;
+                this.posturls[key].url =
+                  "/dlux" + this.posturls[key].url;
               else
-                this.posturls[res.result.url].url =
-                  "/blog" + this.posturls[res.result.url].url;
-              this.posturls[res.result.url].rep = "...";
-              this.rep(res.result.url);
-              if (this.posturls[res.result.url].slider < 0) {
-                this.posturls[res.result.url].slider =
-                  this.posturls[res.result.url].slider * -1;
-                this.posturls[res.result.url].flag = true;
+                this.posturls[key].url =
+                  "/blog" + this.posturls[key].url;
+              this.posturls[key].rep = "...";
+              this.rep(key);
+              if (this.posturls[key].slider < 0) {
+                this.posturls[key].slider =
+                  this.posturls[key].slider * -1;
+                this.posturls[key].flag = true;
               }
-              this.posturls[res.result.url].preview = this.removeMD(
-                this.posturls[res.result.url].body
+              this.posturls[key].preview = this.removeMD(
+                this.posturls[key].body
               ).substr(0, 250);
-              this.posturls[res.result.url].ago = this.timeSince(
-                this.posturls[res.result.url].created
+              this.posturls[key].ago = this.timeSince(
+                this.posturls[key].created
               );
               this.selectPosts();
+              if(modal)this.modalSelect(key)
             }
           });
       } else {
         console.log("no author or permlink", a, p);
+      }
+    },
+    getContracts(url){
+      var contracts = [],
+        getContract = (u, id) => {
+          fetch('https://spktest.dlux.io/api/fileContract/' + id)
+            .then((r) => r.json())
+            .then((res) => {
+              res.result.extend = "7"
+              if (res.result) {
+                this.contracts[id] = res.result
+                this.extendcost[id] = parseInt(res.result.extend / 30 * res.result.r)
+              }
+            });
+        }
+      for(var contract in this.posturls[url].contract){
+        contracts.push(contract)
+      }
+      contracts = [...new Set(contracts)]
+      for(var i = 0; i < contracts.length; i++){
+        getContract(url, contracts[i])
       }
     },
     imgUrlAlt(event) {
@@ -2524,14 +2808,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
           t,
           this.sstats.spk_rate_ldel
         );
-        console.log({
-          t,
-          a,
-          b,
-          c,
-          d: this.saccountapi.granted?.t > 0 ? this.saccountapi.granted.t : 0,
-          g: this.saccountapi.granting?.t > 0 ? this.saccountapi.granting.t : 0,
-        });
         const i = a + b + c;
         if (i) {
           console.log(i, "Phantom SPK");
@@ -2542,7 +2818,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
         }
       }
       function simpleInterest(p, t, r) {
-        console.log({ p, t, r });
         const amount = p * (1 + parseFloat(r) / 365);
         const interest = amount - p;
         return parseInt(interest * t);
@@ -2609,11 +2884,11 @@ function bidNFT(setname, uid, bid_amount, type, callback){
         );
       }
     },
-    getNFTs() {
+    getNFTs(account) {
       this.accountNFTs = [];
       this.accountRNFTs = [];
       for (var i = 0; i < this.providers.length; i++) {
-        this.NFTsLookUp(this.account, this.providers, i);
+        this.NFTsLookUp(account, this.providers, i);
         this.trades(i);
         this.getSetDetails(i);
       }
@@ -2649,7 +2924,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       fetch(this.providers[i].api + "/api/trades/fts/" + this.account)
         .then((r) => r.json())
         .then((json) => {
-          console.log("FT trades", { json, fts: this.providers[i].api });
           const arr = json.result;
           const token = this.providers[i].token;
           for (var j = 0; j < arr.length; j++) {
@@ -2666,7 +2940,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       fetch(this.providers[i].api + "/api/trades/nfts/" + this.account)
         .then((r) => r.json())
         .then((json) => {
-          console.log("NFT trades", { json, nfts: this.providers[i].api });
           const arr = json.result;
           const token = this.providers[i].token;
           for (var j = 0; j < arr.length; j++) {
@@ -2725,15 +2998,12 @@ function bidNFT(setname, uid, bid_amount, type, callback){
               this.displayNFT(0);
             });
           }
-          console.log(rNFTs);
           for (var j = 0; j < rNFTs.length; j++) {
             rNFTs[j].token = p[i].token;
             scripts[rNFTs[j].script] = 1;
             this.accountRNFTs.push(rNFTs[j]);
-            console.log(j, rNFTs[j], this.accountRNFTs);
           }
           for (var script in scripts) {
-            console.log({ script });
             this.callScript({
               script,
               token: scripts[script].token,
@@ -2770,7 +3040,6 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       fetch(this.sapi + "/stats")
         .then((response) => response.json())
         .then((data) => {
-          console.log(data);
           this.spkStats = data.result;
         });
     },
@@ -3062,39 +3331,50 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       this.getTokenUser(this.pageAccount, false);
       //this.getNFTs();
     },
+    goBack(){
+      window.history.back();
+    },
     getIcon(s) {
       return this.baseScript[s] ? this.baseScript[s].set.faicon : "";
     },
   },
   mounted() {
-    console.log(location.pathname.split("/@")[1]);
     if (location.pathname.split("/@")[1]) {
-      this.pageAccount = location.pathname.split("/@")[1];
+      this.pageAccount = location.pathname.split("/@")[1]
+      if (this.pageAccount.indexOf('/') > -1) {
+        this.pagePermlink = this.pageAccount.split('/')[1]
+        this.pageAccount = this.pageAccount.split('/')[0]
+      }
     } else {
       this.pageAccount = this.account;
       this.me = true;
     }
     if (this.pageAccount == this.account) this.me = true;
-    this.focus.account = this.pageAccount;
-    this.sapi = sapi;
-    this.checkAccount("pageAccount", "focus");
-    this.getHiveStats();
-    this.getQuotes();
-    this.getSNodes();
-    this.getPosts();
-    this.getProtocol();
-    this.getSpkStats();
-    this.getRewardFund();
-    this.getFeedPrice();
-    this.getSapi(this.pageAccount, false);
-    this.getTokenUser(this.pageAccount, false);
-    this.getNFTs();
-    //deepLink();
+    if(this.pagePermlink){
+      this.getContent(this.pageAccount, this.pagePermlink, true)
+    } else {
+      this.focus.account = this.pageAccount;
+      this.sapi = sapi;
+      this.checkAccount("pageAccount", "focus");
+      this.getHiveUser();
+      if(!this.me)this.accountRelations(this.pageAccount);
+      this.getHiveStats();
+      this.getQuotes();
+      this.getSNodes();
+      this.getPosts();
+      this.getProtocol();
+      this.getSpkStats();
+      this.getRewardFund();
+      this.getFeedPrice();
+      this.getSapi(this.pageAccount, false);
+      this.getTokenUser(this.pageAccount, false);
+      this.getNFTs(this.pageAccount);
+      deepLink();
+    }
   },
   watch: {
     postSelect(a, b) {
       if (a.searchTerm != b.searchTerm || a.bitMask != b.bitMask) {
-        console.log("Watched");
         this.displayPosts = [];
         this[this.postSelect.entry] = [];
         this.postSelect[this.postSelect.entry].o = 0;
@@ -3120,7 +3400,7 @@ function bidNFT(setname, uid, bid_amount, type, callback){
       return (
         (this.accountinfo.rshares / parseInt(this.rewardFund.recent_claims)) *
         parseFloat(this.rewardFund.reward_balance) *
-        (1 / parseFloat(this.feedPrice.base))
+        (parseFloat(this.feedPrice.base))
       );
     },
   },

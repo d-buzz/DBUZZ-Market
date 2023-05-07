@@ -1,10 +1,15 @@
-import Vue from "https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.esm.browser.js";
+import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js'
+// import Vue from "https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.esm.browser.js";
 import Navue from "/js/navue.js";
 import FootVue from "/js/footvue.js";
 import Cycler from "/js/cycler.js";
 import Popper from "/js/pop.js";
 import Marker from "/js/marker.js";
 import Ratings from "/js/ratings.js";
+import MDE from "/js/mde.js";
+import Replies from "/js/replies.js";
+import CardVue from "/js/cardvue.js";
+import DetailVue from "/js/detailvue.js";
 
 let url = location.href.replace(/\/$/, "");
 let lapi = "";
@@ -32,7 +37,6 @@ let lapi = "";
 // if (!lapi) {
     lapi = "https://token.dlux.io";
 // }
-console.log(lapi);
 if (
     lapi == "https://token.dlux.io" ||
     lapi == "https://spkinstant.hivehoneycomb.com" ||
@@ -43,30 +47,23 @@ if (
 }
 let user = localStorage.getItem("user") || "GUEST";
 let hapi = localStorage.getItem("hapi") || "https://api.hive.blog";
-console.log({
-    lapi,
-});
 
-Vue.directive("scroll", {
-    inserted: function (el, binding) {
-        const onScrollCallback = binding.value;
-        window.addEventListener("scroll", () => onScrollCallback());
-    },
-});
-
-// createApp({ // vue 3
-var app = new Vue({
-  // vue 2
-  el: "#app", // vue 2
+createApp({
+  directives:{
+    scroll
+  },
   data() {
     return {
       toSign: {},
       account: user,
+      spkapi: {},
       pfp: {
         set: "",
         uid: "",
       },
+      sstats: {},
       hasDrop: false,
+      customTime: false,
       dropnai: "",
       balance: "0.000",
       bartoken: "",
@@ -75,6 +72,8 @@ var app = new Vue({
       bargov: "",
       barpow: "",
       toSign: {},
+      contracts: {
+      },
       buyFormValid: false,
       sellFormValid: false,
       govFormValid: false,
@@ -135,6 +134,7 @@ var app = new Vue({
       recenthive: {},
       recenthbd: {},
       openorders: [],
+      extendcost: {},
       toasts: [],
       features: {
         claim_id: "claim",
@@ -410,20 +410,47 @@ var app = new Vue({
     "pop-vue": Popper,
     "vue-markdown": Marker,
     "vue-ratings": Ratings,
+    "mde": MDE,
+    "replies": Replies,
+    "card-vue": CardVue,
+    "detail-vue": DetailVue,
   },
   methods: {
-    vote(url){
+    reply(deets){
+      this.toSign = {
+        type: "raw",
+        key: "posting",
+        op: [["comment", deets]],
+        callbacks: [], //get new replies for a/p
+        txid: `reply:${deets.parent_author}/${deets.permlink}`,
+      }
+    },
+    vote(url) {
+      var key, slider, flag
+      if(typeof url == 'object'){
+        slider = url.slider
+        flag = url.flag
+        url = url.url
+      } else {
+        key = `/@${url.split("/@")[1].split("/")[0]}/${url.split("/@")[1].split("/")[1]}`
+        slider = this.posturls[key].slider
+        flag = this.posturls[key].flag
+      }
       this.toSign = {
         type: "vote",
         cj: {
-          author: url.split('/')[2].replace('@', ''),
-          permlink: url.split('/')[3],
-          weight: this.posturls[url].slider * (this.posturls[url].flag ? -1 : 1),
+          author: url.split("/@")[1].split("/")[0],
+          permlink: url.split("/@")[1].split("/")[1],
+          weight:
+            slider * (flag ? -1 : 1),
         },
         msg: `Voting ...`,
         ops: [""],
         txid: "vote",
       };
+    },
+    setRating(url, rating){
+      this.posturls[url].rating = rating;
     },
     pending(url, text){
       this.posturls[url].comment = text;
@@ -491,36 +518,62 @@ var app = new Vue({
         this[modal].item = this[modal].items[this[modal].index];
       }
     },
+    color_code(name){
+      return parseInt(this.contracts[name] ? this.contracts[name].e.split(':')[0] : 0) - this.spkapi.head_block
+    },
+    Base64toNumber(chars) {
+      const glyphs =
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+=";
+      var result = 0;
+      chars = chars.split("");
+      for (var e = 0; e < chars.length; e++) {
+        result = result * 64 + glyphs.indexOf(chars[e]);
+      }
+      return result;
+    },
+    broca_calc(last = '0,0') {
+      const last_calc = this.Base64toNumber(last.split(',')[1])
+      const accured = parseInt((parseFloat(this.sstats.broca_refill) * (this.sstats.head_block - last_calc)) / (this.spkapi.spk_power * 1000))
+      var total = parseInt(last.split(',')[0]) + accured
+      if (total > (this.spkapi.spk_power * 1000)) total = (this.spkapi.spk_power * 1000)
+      return total
+    },
+    extend(contract, amount, up = false){
+      if(amount > this.broca_calc(this.spkapi.broca))return
+      this.toSign = {
+          type: "cja",
+          cj: {
+            broca: amount,
+            id: contract.i,
+            file_owner: contract.t,
+            power: this.up ? 1 : 0,
+          },
+          id: `spkcc_extend`,
+          msg: `Extending ${contract}...`,
+          ops: ["getTokenUser"],
+          api: "https://spktest.dlux.io",
+          txid: "extend",
+        }
+    },
     modalPrev(modal) {
       if (this[modal].index) this[modal].index--;
       else this[modal].index = this[modal].items.length - 1;
       this[modal].item = this[modal].items[this[modal].index];
     },
+    goBack(){
+      window.history.back();
+    },
     modalSelect(key) {
+      if(key.indexOf('/@') > 0)
+        key = '/@' + key.split('/@')[1];
       this.displayPost.index = key;
       this.displayPost.item = this.posturls[key];
+      window.history.pushState("Blog Modal", this.displayPost.item.title, "/blog/@" + key.split('/@')[1]);
       if (this.displayPost.item.children && !this.displayPost.item.replies.length)
         this.getReplies(
           this.displayPost.item.author,
           this.displayPost.item.permlink
-        ).then((r) => {
-          this.posturls[key].replies = r.result;
-          for(let i = 0; i < this.posturls[key].replies.length; i++) {
-            if(this.posturls[key].replies[i].json_metadata) {
-              try{
-                this.posturls[key].replies[i].json_metadata = JSON.parse(this.posturls[key].replies[i].json_metadata);
-                this.posturls[key].replies[i].edit = false
-              } catch(e) {}
-            }
-            this.posturls[this.posturls[key].replies[i].url] =
-              this.posturls[key].replies[i]
-            if(this.posturls[key].replies[i].slider < 0){
-              this.posturls[key].replies[i].flag = true;
-              this.posturls[key].replies[i].slider =
-                this.posturls[key].replies[i].slider * -1;
-            }
-          }
-        });
+        )
     },
     getRewardFund(){
       fetch(this.hapi, {
@@ -606,13 +659,38 @@ var app = new Vue({
         })
           .then((res) => res.json())
           .then((r) => {
-            if(k)r.key = k;
-            resolve(r);
+          const key = `/@${a}/${p}`
+          var authors = []
+          for (let i = 0; i < r.result.length; i++) {
+            authors.push(r.result[i].author)
+            r.result[i].edit = false;
+            if(r.result[i].children)this.getReplies(r.result[i].author, r.result[i].permlink)
+            if (r.result[i].json_metadata) {
+              try {
+                r.result[i].json_metadata = JSON.parse(
+                  r.result[i].json_metadata
+                );
+              } catch (e) {}
+            }
+            const repKey =`/@${r.result[i].author}/${r.result[i].permlink}`
+            this.posturls[repKey] =
+              r.result[i];
+            if (r.result[i].slider < 0) {
+              r.result[i].flag = true;
+              r.result[i].slider =
+                r.result[i].slider * -1;
+
+            }
+            this.posturls[repKey].rep = "...";
+            this.rep(repKey)
+          }
+          this.posturls[key].replies = r.result;
+          this.getHiveAuthors(authors)
           })
           .catch((err) => {
             reject(err);
           });
-      })
+      });
     },
     run(op) {
       if (typeof this[op] == "function" && this.account != "GUEST") {
@@ -696,8 +774,24 @@ var app = new Vue({
     toUpperCase(value) {
       return value.toUpperCase();
     },
+    gt(a,b){
+      return parseFloat(a)>parseFloat(b);
+    },
     formatNumber(t, n, r, e) {
-      if (typeof t != "number") t = parseFloat(t);
+      if (typeof t != "number") {
+        const parts = t.split(" ");
+        var maybe = 0
+        for (i = 0; i < parts.length; i++) {
+          if (parseFloat(parts[i])>0){
+            maybe += parseFloat(parts[i])
+          }
+        }
+        if (maybe>parseFloat(t)){
+          t = maybe
+        } else {
+          t = parseFloat(t)
+        }
+      }
       if (isNaN(t)) return "Invalid Number";
       if (!isFinite(t)) return (t < 0 ? "-" : "") + "infinite";
       (r = r || "."), (e = e || "");
@@ -748,6 +842,33 @@ var app = new Vue({
       } else {
         if (!this[key]) this[key] = value;
       }
+    },
+    fancyBytes(bytes){
+      var counter = 0, p = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+      while (bytes > 1024){
+        bytes = bytes / 1024
+        counter ++
+      }
+      return `${this.toFixed(bytes, 2)} ${p[counter]}B`
+    },
+    getStats(){
+      fetch('https://token.dlux.io/')
+      .then(r => r.json())
+      .then(r => {
+        r.result.head_block = r.head_block
+        this.stats = r.result
+      })
+    },
+    getSPKStats(){
+      fetch('https://spktest.dlux.io/')
+      .then(r => r.json())
+      .then(r => {
+        r.result.head_block = r.head_block
+        this.sstats = r.result
+      })
+    },
+    expIn(con){
+      return `Expires in ${parseInt((parseInt(con.e.split(':')[0]) - this.spkapi.head_block) / 20 / 60) < 24 ? parseInt((parseInt(con.e.split(':')[0]) - this.spkapi.head_block) / 20 / 60) + ' hours' : parseInt((parseInt(con.e.split(':')[0]) - this.spkapi.head_block) / 20 / 60 / 24) + ' days'}`
     },
     setMem(key, value, reload) {
       if (value.indexOf("https://") == -1) {
@@ -815,10 +936,11 @@ var app = new Vue({
             if (res.result.length < this.postSelect[this.postSelect.entry].a)
               this.postSelect[this.postSelect.entry].e = true;
             for (var i = 0; i < res.result.length; i++) {
-              if (!this.posturls[res.result[i].url]) {
-                this.posturls[res.result[i].url] = res.result[i];
+              const key = `/@${res.result[i].author}/${res.result[i].permlink}`;
+              if (!this.posturls[key]) {
+                this.posturls[key] = res.result[i];
               }
-              this[this.postSelect.entry].push(res.result[i].url);
+              this[this.postSelect.entry].push(key);
             }
             var called = false;
             for (var post in this.posturls) {
@@ -849,7 +971,7 @@ var app = new Vue({
         this[modal[0]].index = modal[1];
       }
     },
-    getContent(a, p) {
+    getContent(a, p, modal) {
       if (a && p) {
         fetch(this.hapi, {
           body: `{"jsonrpc":"2.0", "method":"condenser_api.get_content", "params":["${a}", "${p}"], "id":1}`,
@@ -861,8 +983,9 @@ var app = new Vue({
           .then((r) => r.json())
           .then((res) => {
             if (res.result) {
-              this.posturls[res.result.url] = {
-                ...this.posturls[res.result.url],
+              const key = `/@${res.result.author}/${res.result.permlink}`
+              this.posturls[key] = {
+                ...this.posturls[key],
                 ...res.result,
                 slider: 10000,
                 flag: false,
@@ -870,48 +993,111 @@ var app = new Vue({
                 downVotes: 0,
                 edit: false,
                 hasVoted: false,
+                contract: {},
+                type: 'Blog'
               };
               for (
                 var i = 0;
-                i < this.posturls[res.result.url].active_votes.length;
+                i < this.posturls[key].active_votes.length;
                 i++
               ) {
-                if (this.posturls[res.result.url].active_votes[i].percent > 0)
-                  this.posturls[res.result.url].upVotes++;
-                else this.posturls[res.result.url].downVotes++;
-                if(this.posturls[res.result.url].active_votes[i].voter == this.account){
-                  this.posturls[res.result.url].slider = this.posturls[res.result.url].active_votes[i].percent
-                  this.posturls[res.result.url].hasVoted = true
+                if (this.posturls[key].active_votes[i].percent > 0)
+                  this.posturls[key].upVotes++;
+                else this.posturls[key].downVotes++;
+                if(this.posturls[key].active_votes[i].voter == this.account){
+                  this.posturls[key].slider = this.posturls[key].active_votes[i].percent
+                  this.posturls[key].hasVoted = true
                 }
               }
               try {
-                this.posturls[res.result.url].json_metadata = JSON.parse(
-                  this.posturls[res.result.url].json_metadata
+                this.posturls[key].json_metadata = JSON.parse(
+                  this.posturls[key].json_metadata
                 );
-                this.posturls[res.result.url].pic = this.picFind(
-                  this.posturls[res.result.url].json_metadata
+                this.posturls[key].pic = this.picFind(
+                  this.posturls[key].json_metadata
                 );
               } catch (e) {
-                console.log(res.result.url, "no JSON?");
+                console.log(key, "no JSON?");
               }
-              this.posturls[res.result.url].rep = "...";
-              this.rep(res.result.url);
-              if (this.posturls[res.result.url].slider < 0){
-                this.posturls[res.result.url].slider =
-                  this.posturls[res.result.url].slider * -1;
-                this.posturls[res.result.url].flag = true
+              var contracts = false
+              var type = "Blog";
+              if(this.posturls[key].json_metadata.assets){
+                for(var i = 0; i < this.posturls[key].json_metadata.assets.length; i++){
+                  if(this.posturls[key].json_metadata.assets[i].contract){
+                    this.posturls[key].contract[this.posturls[key].json_metadata.assets[i].contract] = {}
+                    contracts = true
+                  }
+                }
               }
-              this.posturls[res.result.url].preview = this.removeMD(
-                this.posturls[res.result.url].body
+              try {
+              if (
+                "QmNby3SMAAa9hBVHvdkKvvTqs7ssK4nYa2jBdZkxqmRc16" ==
+                this.posturls[key].json_metadata.vrHash ||
+                "newhashhere" ==
+                this.posturls[key].json_metadata.vrHash
+              )
+                type = "360";
+              else if (this.posturls[key].json_metadata.vrHash)
+                type = "VR";
+              else if (this.posturls[key].json_metadata.arHash)
+                type = "AR";
+              else if (this.posturls[key].json_metadata.appHash)
+                type = "APP";
+              else if (this.posturls[key].json_metadata.audHash)
+                type = "Audio";
+              else if (this.posturls[key].json_metadata.vidHash)
+                type = "Video";
+            } catch (e) {
+              console.log(key, e, "no JSON?");
+            }
+            this.posturls[key].type = type;
+              if(contracts){
+                this.getContracts(key)
+              }
+              this.posturls[key].rep = "...";
+              this.rep(key);
+              if (this.posturls[key].slider < 0){
+                this.posturls[key].slider =
+                  this.posturls[key].slider * -1;
+                this.posturls[key].flag = true
+              }
+              this.posturls[key].preview = this.removeMD(
+                this.posturls[key].body
               ).substr(0, 250);
-              this.posturls[res.result.url].ago = this.timeSince(
-                this.posturls[res.result.url].created
+              this.posturls[key].ago = this.timeSince(
+                this.posturls[key].created
               );
               this.selectPosts();
+              if(modal)this.modalSelect(key)
             }
           });
       } else {
         console.log("no author or permlink", a, p);
+      }
+    },
+    updateCost(id){
+      this.extendcost[id] = parseInt(this.contracts[id].extend / 30 * this.contracts[id].r)
+      this.$forceUpdate()
+    },
+    getContracts(url){
+      var contracts = [],
+        getContract = (u, id) => {
+          fetch('https://spktest.dlux.io/api/fileContract/' + id)
+            .then((r) => r.json())
+            .then((res) => {
+              res.result.extend = "7"
+              if (res.result) {
+                this.contracts[id] = res.result
+                this.extendcost[id] = parseInt(res.result.extend / 30 * res.result.r)
+              }
+            });
+        }
+      for(var contract in this.posturls[url].contract){
+        contracts.push(contract)
+      }
+      contracts = [...new Set(contracts)]
+      for(var i = 0; i < contracts.length; i++){
+        getContract(url, contracts[i])
       }
     },
     imgUrlAlt(event) {
@@ -1156,6 +1342,14 @@ var app = new Vue({
             }
           });
     },
+    getSPKUser(user) {
+      if (user)
+        fetch("https://spktest.dlux.io/@" + user)
+          .then((response) => response.json())
+          .then((data) => {
+            this.spkapi = data
+          });
+    },
     getHiveUser(user) {
       if (user)
         fetch(hapi, {
@@ -1178,6 +1372,9 @@ var app = new Vue({
             const power = ((parseInt(this.accountinfo.voting_power) * 10000) / 10000) / 50;
             this.accountinfo.rshares = (power * final_vest) / 10000;
           });
+    },
+    brocaCost(t,c){
+      return parseInt((t/30)*c)
     },
     getHiveAuthors(users) {
       var q = "";
@@ -1203,16 +1400,32 @@ var app = new Vue({
     },
   },
   mounted() {
-    // var setName = location.pathname.split("set/")[1];
-    // if (setName) this.getNFTset(setName);
-    // else this.getNFTsets();
-    // this.getUserNFTs();
-    //this.getQuotes();
-    //this.getNodes();
+    if (location.pathname.split("/@")[1]) {
+      this.pageAccount = location.pathname.split("/@")[1]
+      if (this.pageAccount.indexOf('/') > -1) {
+        this.pagePermlink = this.pageAccount.split('/')[1]
+        this.pageAccount = this.pageAccount.split('/')[0]
+      }
+    } else {
+      this.pageAccount = this.account;
+      this.me = true;
+    }
+    if (this.pageAccount == this.account) this.me = true;
+    if(this.pagePermlink){
+      this.getContent(this.pageAccount, this.pagePermlink, true)
+    } else {
+      this.getPosts();
+      window.addEventListener('scroll', this.handleScroll);
+    }
+    this.getStats()
+    this.getSPKStats()
     this.getPosts();
     this.getProtocol();
     this.getRewardFund();
     this.getFeedPrice();
+  },
+  unmounted () {
+    window.removeEventListener('scroll', this.handleScroll);
   },
   watch: {
     postSelect(a, b){
@@ -1234,7 +1447,7 @@ var app = new Vue({
     voteVal(){
       return ((this.accountinfo.rshares / parseInt(this.rewardFund.recent_claims)) *
         parseFloat(this.rewardFund.reward_balance) *
-        (1/parseFloat(this.feedPrice.base)))
+        (parseFloat(this.feedPrice.base)))
     }
   },
-});
+}).mount('#app')

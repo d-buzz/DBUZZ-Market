@@ -228,12 +228,12 @@ export default {
     sign(op) {
       return new Promise((resolve, reject) => {
         if (this.HKC) {
-          console.log("HKC");
+          console.log("HKC", op);
           this.HKCsign(op)
             .then((r) => resolve(r))
             .catch((e) => reject(e));
         } else if (this.HAS) {
-          console.log({ op });
+          console.log( op );
           this.HASsign(op);
           reject("No TXID");
         } else {
@@ -536,7 +536,7 @@ export default {
     statusPinger(txid, api, r) {
       if (r > 30) return;
       fetch(api + "/api/status/" + txid)
-        .then((r) => r.json())
+        .then((re) => re.json())
         .then((json) => {
           console.log(json, json.status.slice(0, 20));
           if (json.status.slice(0, 20) != "This TransactionID e") {
@@ -546,7 +546,7 @@ export default {
                 function () {
                   this.cleanOps(txid);
                 }.bind(this),
-                30000
+                3000
               );
             } else {
               for (var i = 0; i < this.ops.length; i++) {
@@ -583,6 +583,10 @@ export default {
           console.log(e);
           this.statusPinger(txid, api, r + 1);
         });
+    },
+    showTab(link){
+      if(!deepLink)return
+      deepLink(link)
     },
     searchRecents() {
       this.filterRecents = this.recentUsers.reduce((a, b) => {
@@ -722,7 +726,7 @@ export default {
   },
   template: `
 <div>
-<header class="navbar navbar-expand-sm navbar-dark fixed-top dnav">
+<header class="navbar navbar-expand-sm navbar-dark dnav fixed-top">
   <div class="container-fluid">
     <!--pwa nav toggle-->
     <a class="text-white d-sm-none" style="font-size: 1.5em;" data-bs-toggle="offcanvas" href="#offcanvasNav" role="button" aria-controls="offcanvasExample">
@@ -745,12 +749,12 @@ export default {
             <img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light cover"></a>
 		        <a class="nav-link dropdown-toggle dropdown-bs-toggle text-white-50" id="userDropdown" role="button" aria-expanded="false" data-bs-toggle="dropdown" href="#">
 			      <span id="userName" class="me-1">{{user}}</span></a>
-            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end pt-0" aria-labelledby="userDropdown">
-			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" onClick="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
-			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" onClick="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
-			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" onClick="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
-			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" onClick="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
-			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" onClick="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end bg-black me-1" aria-labelledby="userDropdown">
+			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" @click="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" @click="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" @click="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" @click="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" @click="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
               <li class=""><hr class="dropdown-divider"></li>
 			        <li class=""><a class="dropdown-item" href="/about/"><i class="fas fa-info-circle fa-fw me-2"></i>About</a></li>
               <li class=""><hr class="dropdown-divider"></li>
@@ -765,18 +769,18 @@ export default {
         <ul class="navbar-nav" id="loginMenu" v-show="!user">
           <li class="nav-item d-none"><a class="nav-link" href="/about/">About</a></li>
           <li class="nav-item"></li>
-          <li class="nav-item"><button class="btn btn-primary ms-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers">Login</button></li>
+          <li class="nav-item"><button class="btn btn-sm btn-primary ms-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsers" aria-controls="offcanvasUsers">Login</button></li>
         </ul>
         <ul class="navbar-nav d-sm-none" v-show="user">
           <li>
 		        <a class="nav-link dropdown-toggle dropdown-bs-toggle text-white-50 text-end" id="userDropdown" role="button" aria-expanded="false" data-bs-toggle="dropdown" href="#">
 			      <span id="userName" class="ms-auto me-1"><img :src="avatar" id="userImage" alt="" width="30" height="30" class="img-fluid rounded-circle bg-light cover"></span></a>
-            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end pt-0" aria-labelledby="userDropdown" style="position: absolute;">
-			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" onClick="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
-			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" onClick="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
-			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" onClick="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
-			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" onClick="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
-			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" onClick="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
+            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end bg-black me-1" aria-labelledby="userDropdown" style="position: absolute;">
+			        <li class=""><a class="dropdown-item" :href="'/me#blog/'" @click="showTab('blog')"><i class="fas fa-user fa-fw me-2"></i>Profile</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#wallet/'" @click="showTab('wallet')"><i class="fas fa-wallet fa-fw me-2"></i>Wallet</a></li>
+			        <li class=""><a class="dropdown-item" :href="'/me#inventory/'" @click="showTab('inventory')"><i class="fas fa-boxes fa-fw me-2"></i>Inventory</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#node/'" @click="showTab('node')"><i class="fas fa-robot fa-fw me-2"></i>Node</a></li>
+			        <li class="d-none"><a class="dropdown-item" :href="'/me#settings/'" @click="showTab('settings')"><i class="fas fa-cog fa-fw me-2"></i>Settings</a></li>
               <li class=""><hr class="dropdown-divider"></li>
 			        <li class=""><a class="dropdown-item" href="/about/"><i class="fas fa-info-circle fa-fw me-2"></i>About</a></li>
               <li class=""><hr class="dropdown-divider"></li>
@@ -851,10 +855,10 @@ export default {
 
     <div class="row mb-3">
       <label class="form-label d-none">Set and store username:</label>
-      <div class="input-group">
-        <span class="input-group-text bg-darkg border-dark text-white-50">@</span>
-        <input v-model="userField"  autocapitalize="off" placeholder="username" @keyup.enter="setUser()" class="text-center form-control bg-darkg border-dark text-info">
-        <span class="input-group-text bg-darkg border-dark"><a href="#" @click="setUser()" v-if="userField" class="link-info"><i class="fa-solid fa-circle-plus"></i></a></span>
+      <div class="input-group position-relative">
+        <span class="input-group-text">@</span>
+        <input v-model="userField" autocapitalize="off" placeholder="username" @keyup.enter="setUser()" class="form-control text-info">
+        <span v-if="userField"  class="input-group-text border border-start-0 bg-img-none bg-blur-none no-shadow"><a role="button" @click="setUser()" class="link-info"><i class="fa-solid fa-circle-plus"></i></a></span>
       </div>
       <div class="small text-muted text-center mt-2">
         Usernames are only stored locally. <a class="no-decoration" target="_blank" href="https://signup.hive.io/">Get Account</a>
@@ -890,9 +894,8 @@ export default {
     <div class="row mb-3" v-if="recentUsers.length">
         <label class="form-label">Recent usernames:</label>
         <div class="input-group">
-          <span class="input-group-text bg-darkg border-dark text-white-50">@</span>
-          <input v-model="filterUsers" autocapitalize="off" placeholder="search" @keyup="searchRecents()" class="text-center form-control bg-darkg border-dark text-info">
-          <span class="input-group-text bg-darkg border-dark"><a href="#/" @click="setValue('filterUsers', '')" v-if="filterUsers"><i class="fa-solid fa-xmark"></i></a></span>
+          <span class="input-group-text">@</span>
+          <input type="search" v-model="filterUsers" autocapitalize="off" placeholder="search" @keyup="searchRecents()" class="form-control text-info">
         </div>
       </div>
       <div class="d-flex justify-content-between align-items-center m-3 pb-3 border-dark border-bottom" v-if="!filterUsers" v-for="name in recentUsers">
@@ -904,7 +907,6 @@ export default {
         <div class="flex-shrink"><a href="#" @click="deleteRecentUser(name);searchRecents()" alt="Remove username" class="ms-auto link-secondary"><i class="fa-solid fa-trash-can"></i></a></div>
       </div>
     </div>
-  </div>
   </div>
 </div>`,
 };
